@@ -95,10 +95,7 @@ class validation_dataset(Dataset):
             if(i % a == first_frame):
                 frames.append(self.transform(frame))
         """        
-        # if(len(frames)<self.count):
-        #   for i in range(self.count-len(frames)):
-        #         frames.append(self.transform(frame))
-        #print("no of frames", self.count)
+        
         frames = torch.stack(frames)
         frames = frames[:self.count]
         return frames.unsqueeze(0)
@@ -119,8 +116,7 @@ def im_convert(tensor, video_file_name):
     image = image.numpy()
     image = image.transpose(1,2,0)
     image = image.clip(0, 1)
-    # This image is not used
-    # cv2.imwrite(os.path.join(settings.PROJECT_DIR, 'uploaded_images', video_file_name+'_convert_2.png'),image*255)
+    
     return image
 
 def im_plot(tensor):
@@ -152,7 +148,7 @@ def plot_heat_map(i, model, img, path = './', video_file_name=''):
   _,prediction = torch.max(logits,1)
   idx = np.argmax(logits.detach().cpu().numpy())
   bz, nc, h, w = fmap.shape
-  #out = np.dot(fmap[-1].detach().cpu().numpy().reshape((nc, h*w)).T,weight_softmax[idx,:].T)
+  
   out = np.dot(fmap[i].detach().cpu().numpy().reshape((nc, h*w)).T,weight_softmax[idx,:].T)
   predict = out.reshape(h,w)
   predict = predict - np.min(predict)
@@ -162,17 +158,15 @@ def plot_heat_map(i, model, img, path = './', video_file_name=''):
   heatmap = cv2.applyColorMap(out, cv2.COLORMAP_JET)
   img = im_convert(img[:,-1,:,:,:], video_file_name)
   result = heatmap * 0.5 + img*0.8*255
-  # Saving heatmap - Start
+  
   heatmap_name = video_file_name+"_heatmap_"+str(i)+".png"
   image_name = os.path.join(settings.PROJECT_DIR, 'uploaded_images', heatmap_name)
   cv2.imwrite(image_name,result)
-  # Saving heatmap - End
   result1 = heatmap * 0.5/255 + img*0.8
   r,g,b = cv2.split(result1)
   result1 = cv2.merge((r,g,b))
   return image_name
 
-# Model Selection
 def get_accurate_model(sequence_length):
     model_name = []
     sequence_model = []
@@ -188,26 +182,23 @@ def get_accurate_model(sequence_length):
             if int(seq) == sequence_length:
                 sequence_model.append(model_filename)
         except IndexError:
-            pass  # Handle cases where the filename format doesn't match expected
-
+            pass 
     if len(sequence_model) > 1:
         accuracy = []
         for filename in sequence_model:
             acc = filename.split("_")[1]
-            accuracy.append(acc)  # Convert accuracy to float for proper comparison
+            accuracy.append(acc)
         max_index = accuracy.index(max(accuracy))
         final_model = os.path.join(settings.PROJECT_DIR, "models", sequence_model[max_index])
     elif len(sequence_model) == 1:
         final_model = os.path.join(settings.PROJECT_DIR, "models", sequence_model[0])
     else:
-        print("No model found for the specified sequence length.")  # Handle no models found case
-
+        print("No model found for the specified sequence length.")  
     return final_model
 
 ALLOWED_VIDEO_EXTENSIONS = set(['mp4','gif','webm','avi','3gp','wmv','flv','mkv'])
 
 def allowed_video_file(filename):
-    #print("filename" ,filename.rsplit('.',1)[1].lower())
     if (filename.rsplit('.',1)[1].lower() in ALLOWED_VIDEO_EXTENSIONS):
         return True
     else: 
@@ -258,7 +249,6 @@ def index(request):
 
 def predict_page(request):
     if request.method == "GET":
-        # Redirect to 'home' if 'file_name' is not in session
         if 'file_name' not in request.session:
             return redirect("ml_app:home")
         if 'file_name' in request.session:
@@ -268,27 +258,23 @@ def predict_page(request):
         path_to_videos = [video_file]
         video_file_name = os.path.basename(video_file)
         video_file_name_only = os.path.splitext(video_file_name)[0]
-        # Production environment adjustments
         if not settings.DEBUG:
             production_video_name = os.path.join('/home/app/staticfiles/', video_file_name.split('/')[3])
             print("Production file name", production_video_name)
         else:
             production_video_name = video_file_name
 
-        # Load validation dataset
         video_dataset = validation_dataset(path_to_videos, sequence_length=sequence_length, transform=train_transforms)
 
-        # Load model
         if(device == "gpu"):
-            model = Model(2).cuda()  # Adjust the model instantiation according to your model structure
+            model = Model(2).cuda() 
         else:
-            model = Model(2).cpu()  # Adjust the model instantiation according to your model structure
+            model = Model(2).cpu() 
         model_name = os.path.join(settings.PROJECT_DIR, 'models', get_accurate_model(sequence_length))
         path_to_model = os.path.join(settings.PROJECT_DIR, model_name)
         model.load_state_dict(torch.load(path_to_model, map_location=torch.device('cpu')))
         model.eval()
         start_time = time.time()
-        # Display preprocessing images
         print("<=== | Started Videos Splitting | ===>")
         preprocessed_images = []
         faces_cropped_images = []
@@ -311,17 +297,13 @@ def predict_page(request):
                 break
             frame = frames[i]
 
-            # Convert BGR to RGB
             rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            # Save preprocessed image
             image_name = f"{video_file_name_only}_preprocessed_{i+1}.png"
             image_path = os.path.join(settings.PROJECT_DIR, 'uploaded_images', image_name)
             img_rgb = pImage.fromarray(rgb_frame, 'RGB')
             img_rgb.save(image_path)
             preprocessed_images.append(image_name)
-
-            # Face detection and cropping
             face_locations = face_recognition.face_locations(rgb_frame)
             if len(face_locations) == 0:
                 continue
@@ -329,7 +311,6 @@ def predict_page(request):
             top, right, bottom, left = face_locations[0]
             frame_face = frame[top - padding:bottom + padding, left - padding:right + padding]
 
-            # Convert cropped face image to RGB and save
             rgb_face = cv2.cvtColor(frame_face, cv2.COLOR_BGR2RGB)
             img_face_rgb = pImage.fromarray(rgb_face, 'RGB')
             image_name = f"{video_file_name_only}_cropped_faces_{i+1}.png"
@@ -341,11 +322,9 @@ def predict_page(request):
         print("<=== | Videos Splitting and Face Cropping Done | ===>")
         print("--- %s seconds ---" % (time.time() - start_time))
 
-        # No face detected
         if faces_found == 0:
             return render(request, predict_template_name, {"no_faces": True})
 
-        # Perform prediction
         try:
             heatmap_images = []
             output = ""
@@ -360,11 +339,6 @@ def predict_page(request):
                 print("<=== | Prediction Done | ===>")
                 print("--- %s seconds ---" % (time.time() - start_time))
 
-                # Uncomment if you want to create heat map images
-                # for j in range(sequence_length):
-                #     heatmap_images.append(plot_heat_map(j, model, video_dataset[i], './', video_file_name_only))
-
-            # Render results
             context = {
                 'preprocessed_images': preprocessed_images,
                 'faces_cropped_images': faces_cropped_images,
